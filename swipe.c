@@ -122,13 +122,8 @@ static void gestureCallback(int device, MtTouch *contacts, int numContacts, doub
     static float startAvgX = 0.0f;
     static double lastSwipeTime = 0.0;
 
-    if (numContacts != 3) {
+    if (numContacts != 3 || timestamp - lastSwipeTime < SWIPE_COOLDOWN) {
         swiping = false;
-        pthread_mutex_unlock(&gestureMutex);
-        return;
-    }
-
-    if (timestamp - lastSwipeTime < SWIPE_COOLDOWN) {
         pthread_mutex_unlock(&gestureMutex);
         return;
     }
