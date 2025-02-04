@@ -10,7 +10,7 @@
 #define MAX_WORKSPACES 32
 #define SWIPE_THRESHOLD 0.08f
 #define SWIPE_VELOCITY_THRESHOLD 0.2f
-#define SWIPE_COOLDOWN 0.2
+#define SWIPE_COOLDOWN 0.35
 
 static pthread_mutex_t gestureMutex = PTHREAD_MUTEX_INITIALIZER;
 
