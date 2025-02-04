@@ -14,6 +14,46 @@
 
 static pthread_mutex_t gestureMutex = PTHREAD_MUTEX_INITIALIZER;
 
+static char aerospace_path[256] = {0};
+
+static const char* try_fallback_paths(void) {
+    const char* fallback_paths[] = {
+        "/opt/homebrew/bin/aerospace",
+        "/usr/local/bin/aerospace",
+        "/usr/bin/aerospace"
+    };
+    for (size_t i = 0; i < sizeof(fallback_paths)/sizeof(fallback_paths[0]); i++) {
+        if (access(fallback_paths[i], X_OK) == 0) {
+            strncpy(aerospace_path, fallback_paths[i], sizeof(aerospace_path) - 1);
+            aerospace_path[sizeof(aerospace_path) - 1] = '\0';
+            return aerospace_path;
+        }
+    }
+    return NULL;
+}
+
+static const char* get_aerospace_path(void) {
+    if (aerospace_path[0] != '\0') {
+        return aerospace_path;
+    }
+
+    FILE *fp = popen("which aerospace", "r");
+    if (fp) {
+        if (fgets(aerospace_path, sizeof(aerospace_path), fp)) {
+            aerospace_path[strcspn(aerospace_path, "\n")] = '\0';
+        }
+        pclose(fp);
+    }
+
+    if (aerospace_path[0] == '\0') {
+        if (!try_fallback_paths()) {
+            fprintf(stderr, "Error: Could not find the 'aerospace' binary in PATH or fallback locations.\n");
+            return NULL;
+        }
+    }
+    return aerospace_path;
+}
+
 typedef void *MTDeviceRef;
 
 typedef struct {
@@ -40,14 +80,21 @@ typedef struct {
 typedef void (*MTContactCallbackFunction)(int device, MtTouch *data, int nFingers, double timestamp, int frame);
 
 static int get_allowed_workspaces(char allowed[][WORKSPACE_NAME_SIZE]) {
-    FILE *fp = popen("/opt/homebrew/bin/aerospace list-workspaces --monitor mouse --empty no", "r");
+    const char *aero = get_aerospace_path();
+    if (!aero || aero[0] == '\0') {
+        return 0;
+    }
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s list-workspaces --monitor mouse --empty no", aero);
+    FILE *fp = popen(cmd, "r");
     if (!fp) {
-        fprintf(stderr, "Error: Unable to execute 'aerospace list-workspaces' command.\n");
+        fprintf(stderr, "Error: Unable to execute '%s'\n", cmd);
         return 0;
     }
     int count = 0;
     while (count < MAX_WORKSPACES && fgets(allowed[count], WORKSPACE_NAME_SIZE, fp)) {
-        allowed[count][strcspn(allowed[count], "\n")] = '\0';  // Remove newline
+        allowed[count][strcspn(allowed[count], "\n")] = '\0';
         count++;
     }
     pclose(fp);
@@ -55,9 +102,16 @@ static int get_allowed_workspaces(char allowed[][WORKSPACE_NAME_SIZE]) {
 }
 
 static bool get_current_workspace(char *current, size_t size) {
-    FILE *fp = popen("/opt/homebrew/bin/aerospace list-workspaces --focused", "r");
+    const char *aero = get_aerospace_path();
+    if (!aero || aero[0] == '\0') {
+        return false;
+    }
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s list-workspaces --focused", aero);
+    FILE *fp = popen(cmd, "r");
     if (!fp) {
-        fprintf(stderr, "Error: Unable to execute 'aerospace list-workspaces --focused' command.\n");
+        fprintf(stderr, "Error: Unable to execute '%s'\n", cmd);
         return false;
     }
     if (!fgets(current, size, fp)) {
@@ -70,8 +124,13 @@ static bool get_current_workspace(char *current, size_t size) {
 }
 
 static void switch_workspace(const char *ws) {
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "/opt/homebrew/bin/aerospace workspace %s", ws);
+    const char *aero = get_aerospace_path();
+    if (!aero || aero[0] == '\0') {
+        return;
+    }
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "%s workspace %s", aero, ws);
     printf("Executing: %s\n", cmd);
     int ret = system(cmd);
     if (ret != 0) {
@@ -79,7 +138,6 @@ static void switch_workspace(const char *ws) {
     }
 }
 
-// direction: 1 for right swipe, -1 for left swipe.
 static void switch_workspace_if_allowed(int direction) {
     char current[WORKSPACE_NAME_SIZE];
     if (!get_current_workspace(current, sizeof(current))) {
