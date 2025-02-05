@@ -16,13 +16,6 @@
     <key>KeepAlive</key>
     <true/>
 
-    <key>EnvironmentVariables</key>
-    <dict>
-      <!-- Set a full PATH so that 'where' (or 'which') can find aerospace -->
-      <key>PATH</key>
-      <string>@PATH@</string>
-    </dict>
-
     <key>StandardOutPath</key>
     <string>/tmp/swipe.out</string>
     <key>StandardErrorPath</key>

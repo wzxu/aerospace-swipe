@@ -25,7 +25,6 @@ install_plist:
 	@echo "Generating launch agent plist with binary path $(ABS_TARGET_PATH)..."
 	mkdir -p $(LAUNCH_AGENTS_DIR)
 	sed "s|@TARGET_PATH@|$(ABS_TARGET_PATH)|g" $(PLIST_TEMPLATE) > $(LAUNCH_AGENTS_DIR)/$(PLIST_FILE)
-	sed "s|@PATH@|$(PATH)|g" $(LAUNCH_AGENTS_DIR)/$(PLIST_FILE)
 	@echo "Launch agent plist installed to $(LAUNCH_AGENTS_DIR)/$(PLIST_FILE)"
 
 load_plist:
