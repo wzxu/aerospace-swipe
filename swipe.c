@@ -191,7 +191,16 @@ static void gestureCallback(int _device, MtTouch *contacts, int numContacts,
   static int consecutiveRightFrames = 0;
   static int consecutiveLeftFrames = 0;
 
-  if (numContacts != 3 || timestamp - lastSwipeTime < SWIPE_COOLDOWN) {
+  int activeFingers = 0;
+  for (int i = 0; i < numContacts; i++) {
+    if (contacts[i].size > 0.05f) { // This threshold may need tuning
+      activeFingers++;
+    }
+  }
+
+  // Only proceed if exactly three active fingers are detected and if we're
+  // not in cooldown.
+  if (activeFingers != 3 || timestamp - lastSwipeTime < SWIPE_COOLDOWN) {
     swiping = false;
     consecutiveRightFrames = 0;
     consecutiveLeftFrames = 0;
