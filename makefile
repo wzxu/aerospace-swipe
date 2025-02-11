@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -Wall -Wextra -O3
+CFLAGS = -std=c99 -O3 -g -Wall -Wextra
 FRAMEWORKS = -framework CoreFoundation
 LDLIBS = -ldl
 TARGET = swipe
@@ -10,12 +10,20 @@ PLIST_TEMPLATE = com.acsandmann.swipe.plist.in
 
 ABS_TARGET_PATH = $(shell pwd)/$(TARGET)
 
+SRC_FILES = src/aerospace.c src/cJSON.c src/swipe.c
+
 .PHONY: all clean sign install_plist load_plist uninstall_plist install uninstall
+
+ifeq ($(shell uname -sm),Darwin arm64)
+	ARCH= -arch arm64
+else
+	ARCH= -arch x86_64
+endif
 
 all: $(TARGET)
 
-$(TARGET): swipe.c
-	$(CC) $(CFLAGS) -o $(TARGET) swipe.c $(FRAMEWORKS) $(LDLIBS)
+$(TARGET): $(SRC_FILES)
+	$(CC) $(CFLAGS) $(ARCH) -o $(TARGET) $(SRC_FILES) $(FRAMEWORKS) $(LDLIBS)
 
 sign: $(TARGET)
 	@echo "Signing $(TARGET) with accessibility entitlement..."
