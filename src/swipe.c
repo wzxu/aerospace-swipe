@@ -22,7 +22,7 @@
 #define SWIPE_RIGHT "next"
 #endif
 
-#define ACTIVE_TOUCH_THRESHOLD    0.05f
+#define ACTIVE_TOUCH_THRESHOLD    0.1f
 
 static Aerospace *client = NULL;
 static pthread_mutex_t gestureMutex = PTHREAD_MUTEX_INITIALIZER;
