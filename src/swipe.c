@@ -22,7 +22,7 @@
 #define SWIPE_RIGHT "next"
 #endif
 
-#define ACTIVE_TOUCH_THRESHOLD    0.1f
+#define ACTIVE_TOUCH_THRESHOLD    0.05f
 
 static Aerospace *client = NULL;
 static pthread_mutex_t gestureMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -93,7 +93,7 @@ static void gestureCallback(int _device, MtTouch *contacts, int numContacts,
     float sumX = 0.0f;
     float sumVelX = 0.0f;
     for (int i = 0; i < numContacts; ++i) {
-        if (contacts[i].size > ACTIVE_TOUCH_THRESHOLD) {
+        if (contacts[i].size > ACTIVE_TOUCH_THRESHOLD && contacts[i].state == 4) {
             activeCount++;
             sumX += contacts[i].normalized.pos.x;
             sumVelX += contacts[i].normalized.vel.x;
