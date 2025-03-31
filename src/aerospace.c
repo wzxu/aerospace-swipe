@@ -1,15 +1,16 @@
 #include <errno.h>
+#include <pwd.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <pwd.h>
 
-#include "cJSON.h"
 #include "aerospace.h"
+#include "cJSON.h"
 
 #define DEFAULT_MAX_BUFFER_SIZE 2048
 #define DEFAULT_EXTENDED_BUFFER_SIZE 4096
@@ -60,7 +61,8 @@ static cJSON *decode_response(const char *response) {
 
 static cJSON *perform_query(Aerospace *client, cJSON *query) {
   aerospace_send(client, query);
-  /* The query object is deleted inside perform_query (via aerospace_send call) */
+  /* The query object is deleted inside perform_query (via aerospace_send call)
+   */
   char *response_str = aerospace_receive(client, DEFAULT_MAX_BUFFER_SIZE);
   cJSON *response_json = decode_response(response_str);
   free(response_str);
@@ -68,7 +70,7 @@ static cJSON *perform_query(Aerospace *client, cJSON *query) {
 }
 
 static char *execute_workspace_command(Aerospace *client, const char *cmd,
-                                         int wrap, const char *stdin_value) {
+                                       int wrap, const char *stdin_value) {
   cJSON *query = cJSON_CreateObject();
   if (!query)
     fatal_error("Memory allocation error");
@@ -241,11 +243,11 @@ char *aerospace_switch(Aerospace *client, const char *direction) {
 }
 
 char *aerospace_workspace(Aerospace *client, int wrap, const char *ws,
-                           const char *in) {
+                          const char *in) {
   return execute_workspace_command(client, ws, wrap, in);
 }
 
-char *aerospace_list_workspaces(Aerospace *client) {
+char *aerospace_list_workspaces(Aerospace *client, bool empty) {
   cJSON *query = cJSON_CreateObject();
   if (!query)
     fatal_error("Memory allocation error");
@@ -259,8 +261,10 @@ char *aerospace_list_workspaces(Aerospace *client) {
   cJSON_AddItemToArray(args, cJSON_CreateString("list-workspaces"));
   cJSON_AddItemToArray(args, cJSON_CreateString("--monitor"));
   cJSON_AddItemToArray(args, cJSON_CreateString("focused"));
-  cJSON_AddItemToArray(args, cJSON_CreateString("--empty"));
-  cJSON_AddItemToArray(args, cJSON_CreateString("no"));
+  if (empty) {
+    cJSON_AddItemToArray(args, cJSON_CreateString("--empty"));
+    cJSON_AddItemToArray(args, cJSON_CreateString("no"));
+  }
   cJSON_AddItemToObject(query, "args", args);
   cJSON_AddStringToObject(query, "stdin", "");
 

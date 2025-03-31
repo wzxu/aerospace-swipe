@@ -1,8 +1,9 @@
 #define AEROSPACE_H
 
+#include "cJSON.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <sys/types.h>
-#include "cJSON.h"
 
 typedef struct Aerospace Aerospace;
 
@@ -18,6 +19,7 @@ void aerospace_close(Aerospace *client);
 
 char *aerospace_switch(Aerospace *client, const char *direction);
 
-char *aerospace_workspace(Aerospace *client, int wrap, const char *ws, const char *in);
+char *aerospace_workspace(Aerospace *client, int wrap, const char *ws,
+                          const char *in);
 
-char *aerospace_list_workspaces(Aerospace *client);
+char *aerospace_list_workspaces(Aerospace *client, bool empty);
