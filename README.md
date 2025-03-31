@@ -19,6 +19,7 @@ config file is optional and only needed if you want to change the default settin
   "haptics": false,
   "natural_swipe": false,
   "wrap_around": true,
+  "skip_empty": true,
   "fingers": 3
 }
 ```
