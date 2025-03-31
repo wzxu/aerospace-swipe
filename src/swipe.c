@@ -68,7 +68,7 @@ static void gestureCallback(int _device, MtTouch *contacts, int numContacts,
         }
     }
 
-    if (activeCount != 3 || (timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
+    if (activeCount != config.fingers || (timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
         swiping = false;
         consecutiveRightFrames = 0;
         consecutiveLeftFrames = 0;

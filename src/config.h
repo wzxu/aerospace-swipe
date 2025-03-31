@@ -12,6 +12,7 @@ typedef struct {
     bool natural_swipe;
     bool wrap_around;
     bool haptic;
+    int fingers;
     const char *swipe_left;
     const char *swipe_right;
 } Config;
@@ -22,6 +23,7 @@ static Config default_config() {
     config.natural_swipe = false;
     config.wrap_around = true;
     config.haptic = false;
+    config.fingers = 3;
     config.swipe_left = "prev";
     config.swipe_right = "next";
     return config;
@@ -94,6 +96,9 @@ static Config load_config() {
 
     item = cJSON_GetObjectItem(root, "haptic");
     if (cJSON_IsBool(item)) config.haptic = cJSON_IsTrue(item);
+
+    item = cJSON_GetObjectItem(root, "fingers");
+    if (cJSON_IsNumber(item)) config.fingers = item->valueint;
 
     config.swipe_left = config.natural_swipe ? "next" : "prev";
     config.swipe_right = config.natural_swipe ? "prev" : "next";
