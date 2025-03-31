@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -std=c99 -O3 -g -Wall -Wextra
-FRAMEWORKS = -framework CoreFoundation
+FRAMEWORKS = -framework CoreFoundation -framework IOKit -F/System/Library/PrivateFrameworks -framework MultitouchSupport
 LDLIBS = -ldl
 TARGET = swipe
 
@@ -10,7 +10,7 @@ PLIST_TEMPLATE = com.acsandmann.swipe.plist.in
 
 ABS_TARGET_PATH = $(shell pwd)/$(TARGET)
 
-SRC_FILES = src/aerospace.c src/cJSON.c src/swipe.c
+SRC_FILES = src/aerospace.c src/cJSON.c src/swipe.c src/haptic.c
 
 .PHONY: all clean sign install_plist load_plist uninstall_plist install uninstall
 
@@ -39,9 +39,11 @@ load_plist:
 	@echo "Loading launch agent..."
 	launchctl load $(LAUNCH_AGENTS_DIR)/$(PLIST_FILE)
 
-uninstall_plist:
+unload_plist:
 	@echo "Unloading launch agent..."
 	launchctl unload $(LAUNCH_AGENTS_DIR)/$(PLIST_FILE)
+
+uninstall_plist:
 	@echo "Removing launch agent plist from $(LAUNCH_AGENTS_DIR)..."
 	rm -f $(LAUNCH_AGENTS_DIR)/$(PLIST_FILE)
 
@@ -49,7 +51,9 @@ build: all sign
 
 install: all sign install_plist load_plist
 
-uninstall: uninstall_plist clean
+uninstall: unload_plist uninstall_plist clean
+
+restart: unload_plist load_plist
 
 clean:
 	rm -f $(TARGET)
