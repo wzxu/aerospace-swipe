@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -std=c99 -O3 -g -Wall -Wextra
-FRAMEWORKS = -framework CoreFoundation -framework IOKit -F/System/Library/PrivateFrameworks -framework MultitouchSupport
+FRAMEWORKS = -framework CoreFoundation -framework IOKit -F/System/Library/PrivateFrameworks -framework MultitouchSupport -framework ApplicationServices -framework Cocoa
 LDLIBS = -ldl
 TARGET = swipe
 
@@ -8,9 +8,16 @@ LAUNCH_AGENTS_DIR = $(HOME)/Library/LaunchAgents
 PLIST_FILE = com.acsandmann.swipe.plist
 PLIST_TEMPLATE = com.acsandmann.swipe.plist.in
 
-ABS_TARGET_PATH = $(shell pwd)/$(TARGET)
+SRC_FILES = src/aerospace.c src/cJSON.c src/haptic.c src/event_tap.c src/main.m
 
-SRC_FILES = src/aerospace.c src/cJSON.c src/swipe.c src/haptic.c
+BINARY = swipe
+BINARY_NAME = AerospaceSwipe
+APP_BUNDLE = $(BINARY_NAME).app
+APP_CONTENTS = $(APP_BUNDLE)/Contents
+APP_MACOS = $(APP_CONTENTS)/MacOS
+INFO_PLIST = $(APP_CONTENTS)/Info.plist
+
+ABS_TARGET_PATH = $(shell pwd)/$(APP_MACOS)/$(BINARY_NAME)
 
 .PHONY: all clean sign install_plist load_plist uninstall_plist install uninstall
 
@@ -19,6 +26,33 @@ ifeq ($(shell uname -sm),Darwin arm64)
 else
 	ARCH= -arch x86_64
 endif
+
+bundle: $(BINARY)
+	@echo "Creating app bundle $(APP_BUNDLE)..."
+	mkdir -p $(APP_MACOS)
+	mkdir -p $(APP_CONTENTS)/Resources
+	cp $(BINARY) $(APP_MACOS)/$(BINARY_NAME)
+	@echo "Generating Info.plist..."
+	@echo '<?xml version="1.0" encoding="UTF-8"?>' > $(INFO_PLIST)
+	@echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> $(INFO_PLIST)
+	@echo '<plist version="1.0">' >> $(INFO_PLIST)
+	@echo '<dict>' >> $(INFO_PLIST)
+	@echo '    <key>CFBundleExecutable</key>' >> $(INFO_PLIST)
+	@echo '    <string>$(BINARY_NAME)</string>' >> $(INFO_PLIST)
+	@echo '    <key>CFBundleIdentifier</key>' >> $(INFO_PLIST)
+	@echo '    <string>com.example.swipe</string>' >> $(INFO_PLIST)
+	@echo '    <key>CFBundleName</key>' >> $(INFO_PLIST)
+	@echo '    <string>$(BINARY_NAME)</string>' >> $(INFO_PLIST)
+	@echo '    <key>CFBundlePackageType</key>' >> $(INFO_PLIST)
+	@echo '    <string>APPL</string>' >> $(INFO_PLIST)
+	@echo '    <key>NSPrincipalClass</key>' >> $(INFO_PLIST)
+	@echo '    <string>NSApplication</string>' >> $(INFO_PLIST)
+	@echo '    <key>LSUIElement</key>' >> $(INFO_PLIST)
+	@echo '    <true/>' >> $(INFO_PLIST)
+	@echo '</dict>' >> $(INFO_PLIST)
+	@echo '</plist>' >> $(INFO_PLIST)
+	@echo "APPL????" > $(APP_CONTENTS)/PkgInfo
+	codesign --entitlements accessibility.entitlements --sign - $(APP_BUNDLE)
 
 all: $(TARGET)
 
@@ -49,11 +83,14 @@ uninstall_plist:
 
 build: all sign
 
-install: all sign install_plist load_plist
+install: all bundle install_plist load_plist
 
 uninstall: unload_plist uninstall_plist clean
 
 restart: unload_plist load_plist
 
+format:
+	clang-format -i -- **/**.c **/**.h **/**.m
+
 clean:
-	rm -f $(TARGET)
+	rm -rf $(TARGET) /Users/atticus/Library/LaunchAgents/com.acsandmann.swipe.plist $(APP_BUNDLE)
