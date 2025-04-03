@@ -1,52 +1,63 @@
-#include "event_tap.h"
+#import "event_tap.h"
+#import <AppKit/AppKit.h>
 #include <CoreFoundation/CoreFoundation.h>
-#include <CoreGraphics/CoreGraphics.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-const int NSEventMaskGesture = 29;
+@implementation TouchConverter
 
-touch convert_nstouch(id nsTouch)
++ (touch)convert_nstouch:(id)nsTouch
 {
+	NSTouch* touchObj = (NSTouch*)nsTouch;
 	touch nt;
 
-	CGPoint pos = ((CGPoint(*)(id, SEL))objc_msgSend)(nsTouch, sel_getUid("normalizedPosition"));
+	CGPoint pos = [touchObj normalizedPosition];
 	nt.x = pos.x;
 	nt.y = pos.y;
 
-	nt.phase = ((int (*)(id, SEL))objc_msgSend)(nsTouch, sel_getUid("phase"));
-	nt.timestamp = ((double (*)(id, SEL))objc_msgSend)(nsTouch, sel_getUid("timestamp"));
+	nt.phase = (int)[touchObj phase];
+	nt.timestamp = [[touchObj valueForKey:@"timestamp"] doubleValue];
 
-	id touchIdentity = ((id(*)(id, SEL))objc_msgSend)(nsTouch, sel_getUid("identity"));
+	id touchIdentity = [touchObj identity];
 
-	if (!touchStates)
-		touchStates = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, NULL);
+	if (!touchStates) {
+		touchStates = CFDictionaryCreateMutable(NULL, 0,
+			&kCFTypeDictionaryKeyCallBacks,
+			NULL);
+	}
 
 	double velocity_x = 0.0;
-	touch_state* prevState = (touch_state*)CFDictionaryGetValue(touchStates, touchIdentity);
-	if (prevState) {
-		double dt = nt.timestamp - prevState->timestamp;
+	touch_state* state = (touch_state*)CFDictionaryGetValue(touchStates, (__bridge const void*)(touchIdentity));
+	if (state) {
+		double dt = nt.timestamp - state->timestamp;
 		if (dt > 0)
-			velocity_x = (nt.x - prevState->x) / dt;
-		free(prevState);
+			velocity_x = (nt.x - state->x) / dt;
+		state->x = nt.x;
+		state->y = nt.y;
+		state->timestamp = nt.timestamp;
+	} else {
+		state = malloc(sizeof(touch_state));
+		if (state) {
+			state->x = nt.x;
+			state->y = nt.y;
+			state->timestamp = nt.timestamp;
+			CFDictionarySetValue(touchStates, (__bridge const void*)(touchIdentity), state);
+		}
 	}
 	nt.velocity = velocity_x;
 
-	touch_state* newState = malloc(sizeof(touch_state));
-	if (newState) {
-		newState->x = nt.x;
-		newState->y = nt.y;
-		newState->timestamp = nt.timestamp;
-		CFDictionarySetValue(touchStates, touchIdentity, newState);
+	if (nt.phase == 8) {
+		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
+		if (state)
+			free(state);
 	}
-
-	if (nt.phase == 8)
-		CFDictionaryRemoveValue(touchStates, nsTouch);
 
 	return nt;
 }
+
+@end
 
 bool event_tap_enabled(struct event_tap* event_tap)
 {
@@ -56,7 +67,7 @@ bool event_tap_enabled(struct event_tap* event_tap)
 
 bool event_tap_begin(struct event_tap* event_tap, CGEventRef (*reference)(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* userdata))
 {
-	event_tap->mask = 1 << NSEventMaskGesture;
+	event_tap->mask = 1 << NSEventTypeGesture;
 	event_tap->handle = CGEventTapCreate(kCGHIDEventTap,
 		kCGHeadInsertEventTap,
 		kCGEventTapOptionDefault,

@@ -2,8 +2,9 @@
 #include "Cocoa/Cocoa.h"
 #include "aerospace.h"
 #include "config.h"
-#include "event_tap.h"
+#import "event_tap.h"
 #include "haptic.h"
+#include <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
 #include <pthread.h>
 
@@ -45,27 +46,17 @@ static void switch_workspace(const char* ws)
 		haptic_actuate(haptic, 3);
 }
 
-static void gestureCallback(touch* contacts, int numContacts,
-	double timestamp)
+static void gestureCallback(touch* contacts, int numContacts)
 {
 	pthread_mutex_lock(&gestureMutex);
 	static bool swiping = false;
 	static float startAvgX = 0.0f;
+	static float startAvgY = 0.0f;
 	static double lastSwipeTime = 0.0;
 	static int consecutiveRightFrames = 0;
 	static int consecutiveLeftFrames = 0;
 
-	int activeCount = 0;
-	float sumX = 0.0f;
-	float sumVelX = 0.0f;
-	for (int i = 0; i < numContacts; ++i) {
-		// TODO: check size vs ACTIVE_TOUCH_THRESHOLD
-		activeCount++;
-		sumX += contacts[i].x;
-		sumVelX += contacts[i].velocity;
-	}
-
-	if (activeCount != config.fingers || (timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
+	if (numContacts != config.fingers || (contacts[0].timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
 		swiping = false;
 		consecutiveRightFrames = 0;
 		consecutiveLeftFrames = 0;
@@ -73,16 +64,35 @@ static void gestureCallback(touch* contacts, int numContacts,
 		return;
 	}
 
-	const float avgX = sumX / activeCount;
-	const float avgVelX = sumVelX / activeCount;
+	float sumX = 0.0f;
+	float sumVelX = 0.0f;
+	float sumY = 0.0f;
+
+	for (int i = 0; i < numContacts; ++i) {
+		sumX += contacts[i].x;
+		sumVelX += contacts[i].velocity;
+		sumY += contacts[i].y;
+	}
+
+	const float avgX = sumX / numContacts;
+	const float avgVelX = sumVelX / numContacts;
+	const float avgY = sumY / numContacts;
 
 	if (!swiping) {
 		swiping = true;
 		startAvgX = avgX;
+		startAvgY = avgY;
 		consecutiveRightFrames = 0;
 		consecutiveLeftFrames = 0;
 	} else {
-		const float delta = avgX - startAvgX;
+		const float deltaX = avgX - startAvgX;
+        const float deltaY = avgY - startAvgY;
+
+        if (fabs(deltaY) > fabs(deltaX)) {
+            pthread_mutex_unlock(&gestureMutex);
+            return;
+        }
+
 		bool triggered = false;
 		if (avgVelX > SWIPE_VELOCITY_THRESHOLD) {
 			consecutiveRightFrames++;
@@ -102,18 +112,18 @@ static void gestureCallback(touch* contacts, int numContacts,
 				triggered = true;
 				consecutiveLeftFrames = 0;
 			}
-		} else if (delta > SWIPE_THRESHOLD) {
+		} else if (deltaX > SWIPE_THRESHOLD) {
 			NSLog(@"Right swipe (by position) detected.\n");
 			switch_workspace(config.swipe_right);
 			triggered = true;
-		} else if (delta < -SWIPE_THRESHOLD) {
+		} else if (deltaX < -SWIPE_THRESHOLD) {
 			NSLog(@"Left swipe (by position) detected.\n");
 			switch_workspace(config.swipe_left);
 			triggered = true;
 		}
 
 		if (triggered) {
-			lastSwipeTime = timestamp;
+			lastSwipeTime = contacts[0].timestamp;
 			swiping = false;
 		}
 	}
@@ -121,52 +131,49 @@ static void gestureCallback(touch* contacts, int numContacts,
 	pthread_mutex_unlock(&gestureMutex);
 }
 
-static CGEventRef key_handler(CGEventTapProxy proxy, CGEventType type,
-	CGEventRef event, void* reference)
+static CGEventRef key_handler(CGEventTapProxy proxy,
+	CGEventType type,
+	CGEventRef event,
+	void* reference)
 {
+	if (!AXIsProcessTrusted()) {
+		NSLog(@"Accessibility permission lost. Disabling event tap to allow system events.");
+		event_tap_end((struct event_tap*)reference);
+		return event;
+	}
+
 	switch (type) {
 	case kCGEventTapDisabledByTimeout:
-		NSLog(@"Timeout\n");
-	case kCGEventTapDisabledByUserInput: {
-		NSLog(@"restarting event-tap\n");
+		NSLog(@"Timeout.\n");
+	case kCGEventTapDisabledByUserInput:
+		NSLog(@"Re‐enabling event tap.\n");
 		CGEventTapEnable(((struct event_tap*)reference)->handle, true);
-	} break;
-	case 29: {
-		Class NSEventClass = objc_getClass("NSEvent");
-		SEL eventWithCGEventSel = sel_getUid("eventWithCGEvent:");
-		id (*eventWithCGEventFunc)(id, SEL, CGEventRef) = (void*)objc_msgSend;
-		id nsEvent = eventWithCGEventFunc(NSEventClass, eventWithCGEventSel, event);
+		break;
+	case NSEventTypeGesture: {
+		NSEvent* nsEvent = [NSEvent eventWithCGEvent:event];
+		NSSet<NSTouch*>* touches = nsEvent.allTouches;
+		NSUInteger count = touches.count;
 
-		SEL allTouchesSel = sel_getUid("allTouches");
-		id (*allTouchesFunc)(id, SEL) = (void*)objc_msgSend;
-		id touches = allTouchesFunc(nsEvent, allTouchesSel);
-
-		CFSetRef touchSet = (CFSetRef)touches;
-		CFIndex count = CFSetGetCount(touchSet);
-
-		id* nsTouchArray = malloc(sizeof(id) * count);
-		if (!nsTouchArray)
+		if (count == 0)
 			return event;
-		CFSetGetValues(touchSet, (const void**)nsTouchArray);
 
 		touch* nativeTouches = malloc(sizeof(touch) * count);
-		if (!nativeTouches) {
-			free(nsTouchArray);
+		if (nativeTouches == NULL)
 			return event;
-		}
 
-		for (int i = 0; i < count; ++i)
-			nativeTouches[i] = convert_nstouch(nsTouchArray[i]);
+		NSUInteger i = 0;
+		for (NSTouch* aTouch in touches)
+			nativeTouches[i++] = [TouchConverter convert_nstouch:aTouch];
 
-		gestureCallback(nativeTouches, count, nativeTouches[0].timestamp);
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			gestureCallback(nativeTouches, count);
+			free(nativeTouches);
+		});
 
-		free(nativeTouches);
-		free(nsTouchArray);
-		break;
+		return event;
 	}
-	default:
-		break;
 	}
+
 	return event;
 }
 
@@ -251,7 +258,6 @@ int main(int argc, const char* argv[])
 
 		event_tap_begin(&g_event_tap, key_handler);
 
-		// Continue with normal application startup.
 		return NSApplicationMain(argc, argv);
 	}
 }

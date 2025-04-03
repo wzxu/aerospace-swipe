@@ -1,5 +1,7 @@
 #pragma once
 #include <Carbon/Carbon.h>
+#import <CoreGraphics/CoreGraphics.h>
+#import <Foundation/Foundation.h>
 #include <objc/message.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,10 +29,13 @@ typedef struct {
 	double timestamp;
 } touch_state;
 
+@interface TouchConverter : NSObject
++ (touch)convert_nstouch:(id)nsTouch;
+@end
+
 struct event_tap g_event_tap;
 static CFMutableDictionaryRef touchStates;
 
-touch convert_nstouch(id nsTouch);
 bool event_tap_enabled(struct event_tap* event_tap);
 bool event_tap_begin(struct event_tap* event_tap, CGEventRef (*reference)(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* userdata));
 void event_tap_end(struct event_tap* event_tap);
