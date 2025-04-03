@@ -51,6 +51,7 @@ static void gestureCallback(touch* contacts, int numContacts)
 	pthread_mutex_lock(&gestureMutex);
 	static bool swiping = false;
 	static float startAvgX = 0.0f;
+	static float startAvgY = 0.0f;
 	static double lastSwipeTime = 0.0;
 	static int consecutiveRightFrames = 0;
 	static int consecutiveLeftFrames = 0;
@@ -65,22 +66,33 @@ static void gestureCallback(touch* contacts, int numContacts)
 
 	float sumX = 0.0f;
 	float sumVelX = 0.0f;
+	float sumY = 0.0f;
 
 	for (int i = 0; i < numContacts; ++i) {
 		sumX += contacts[i].x;
 		sumVelX += contacts[i].velocity;
+		sumY += contacts[i].y;
 	}
 
 	const float avgX = sumX / numContacts;
 	const float avgVelX = sumVelX / numContacts;
+	const float avgY = sumY / numContacts;
 
 	if (!swiping) {
 		swiping = true;
 		startAvgX = avgX;
+		startAvgY = avgY;
 		consecutiveRightFrames = 0;
 		consecutiveLeftFrames = 0;
 	} else {
-		const float delta = avgX - startAvgX;
+		const float deltaX = avgX - startAvgX;
+        const float deltaY = avgY - startAvgY;
+
+        if (fabs(deltaY) > fabs(deltaX)) {
+            pthread_mutex_unlock(&gestureMutex);
+            return;
+        }
+
 		bool triggered = false;
 		if (avgVelX > SWIPE_VELOCITY_THRESHOLD) {
 			consecutiveRightFrames++;
@@ -100,11 +112,11 @@ static void gestureCallback(touch* contacts, int numContacts)
 				triggered = true;
 				consecutiveLeftFrames = 0;
 			}
-		} else if (delta > SWIPE_THRESHOLD) {
+		} else if (deltaX > SWIPE_THRESHOLD) {
 			NSLog(@"Right swipe (by position) detected.\n");
 			switch_workspace(config.swipe_right);
 			triggered = true;
-		} else if (delta < -SWIPE_THRESHOLD) {
+		} else if (deltaX < -SWIPE_THRESHOLD) {
 			NSLog(@"Left swipe (by position) detected.\n");
 			switch_workspace(config.swipe_left);
 			triggered = true;
