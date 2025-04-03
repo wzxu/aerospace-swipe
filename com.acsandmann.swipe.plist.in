@@ -22,6 +22,9 @@
 	<key>ProcessType</key>
     <string>Interactive</string>
 
+    <key>Nice</key>
+	<integer>0</integer>
+
     <key>StandardOutPath</key>
     <string>/tmp/swipe.out</string>
     <key>StandardErrorPath</key>

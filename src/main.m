@@ -2,7 +2,8 @@
 #include "Cocoa/Cocoa.h"
 #include "aerospace.h"
 #include "config.h"
-#include "event_tap.h"
+#import "event_tap.h"
+#include <AppKit/AppKit.h>
 #include "haptic.h"
 #import <ApplicationServices/ApplicationServices.h>
 #include <pthread.h>
@@ -45,8 +46,7 @@ static void switch_workspace(const char* ws)
 		haptic_actuate(haptic, 3);
 }
 
-static void gestureCallback(touch* contacts, int numContacts,
-	double timestamp)
+static void gestureCallback(touch* contacts, int numContacts)
 {
 	pthread_mutex_lock(&gestureMutex);
 	static bool swiping = false;
@@ -65,7 +65,7 @@ static void gestureCallback(touch* contacts, int numContacts,
 		sumVelX += contacts[i].velocity;
 	}
 
-	if (activeCount != config.fingers || (timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
+	if (activeCount != config.fingers || (contacts[0].timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
 		swiping = false;
 		consecutiveRightFrames = 0;
 		consecutiveLeftFrames = 0;
@@ -113,7 +113,7 @@ static void gestureCallback(touch* contacts, int numContacts,
 		}
 
 		if (triggered) {
-			lastSwipeTime = timestamp;
+			lastSwipeTime = contacts[0].timestamp;
 			swiping = false;
 		}
 	}
@@ -121,53 +121,42 @@ static void gestureCallback(touch* contacts, int numContacts,
 	pthread_mutex_unlock(&gestureMutex);
 }
 
-static CGEventRef key_handler(CGEventTapProxy proxy, CGEventType type,
-	CGEventRef event, void* reference)
+static CGEventRef key_handler(CGEventTapProxy proxy,
+                              CGEventType type,
+                              CGEventRef event,
+                              void *reference)
 {
-	switch (type) {
-	case kCGEventTapDisabledByTimeout:
-		NSLog(@"Timeout\n");
-	case kCGEventTapDisabledByUserInput: {
-		NSLog(@"restarting event-tap\n");
-		CGEventTapEnable(((struct event_tap*)reference)->handle, true);
-	} break;
-	case 29: {
-		Class NSEventClass = objc_getClass("NSEvent");
-		SEL eventWithCGEventSel = sel_getUid("eventWithCGEvent:");
-		id (*eventWithCGEventFunc)(id, SEL, CGEventRef) = (void*)objc_msgSend;
-		id nsEvent = eventWithCGEventFunc(NSEventClass, eventWithCGEventSel, event);
+    switch (type) {
+        case kCGEventTapDisabledByTimeout:
+            NSLog(@"Timeout.\n");
+        case kCGEventTapDisabledByUserInput:
+            NSLog(@"Re‐enabling event tap.\n");
+            CGEventTapEnable(((struct event_tap *)reference)->handle, true);
+            break;
+        case NSEventTypeGesture:
+        case NSEventTypeSwipe: {
+            NSEvent *nsEvent = [NSEvent eventWithCGEvent:event];
+            NSSet<NSTouch *> *touches = nsEvent.allTouches;
+            NSUInteger count = touches.count;
 
-		SEL allTouchesSel = sel_getUid("allTouches");
-		id (*allTouchesFunc)(id, SEL) = (void*)objc_msgSend;
-		id touches = allTouchesFunc(nsEvent, allTouchesSel);
+            if (count == 0) return event;
 
-		CFSetRef touchSet = (CFSetRef)touches;
-		CFIndex count = CFSetGetCount(touchSet);
+            touch *nativeTouches = malloc(sizeof(touch) * count);
+            if (nativeTouches == NULL) return event;
 
-		id* nsTouchArray = malloc(sizeof(id) * count);
-		if (!nsTouchArray)
-			return event;
-		CFSetGetValues(touchSet, (const void**)nsTouchArray);
+            NSUInteger i = 0;
+            for (NSTouch *aTouch in touches) nativeTouches[i++] = [TouchConverter convert_nstouch:aTouch];
 
-		touch* nativeTouches = malloc(sizeof(touch) * count);
-		if (!nativeTouches) {
-			free(nsTouchArray);
-			return event;
-		}
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            	gestureCallback(nativeTouches, count);
+            	free(nativeTouches);
+            });
 
-		for (int i = 0; i < count; ++i)
-			nativeTouches[i] = convert_nstouch(nsTouchArray[i]);
+            return event;
+        }
+    }
 
-		gestureCallback(nativeTouches, count, nativeTouches[0].timestamp);
-
-		free(nativeTouches);
-		free(nsTouchArray);
-		break;
-	}
-	default:
-		break;
-	}
-	return event;
+    return event;
 }
 
 static void acquire_lockfile(void)

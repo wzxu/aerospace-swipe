@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -std=c99 -O3 -g -Wall -Wextra
+CFLAGS = -std=c99 -O3 -march=native -flto -fomit-frame-pointer -funroll-loops -g -Wall -Wextra
 FRAMEWORKS = -framework CoreFoundation -framework IOKit -F/System/Library/PrivateFrameworks -framework MultitouchSupport -framework ApplicationServices -framework Cocoa
 LDLIBS = -ldl
 TARGET = swipe
@@ -8,7 +8,7 @@ LAUNCH_AGENTS_DIR = $(HOME)/Library/LaunchAgents
 PLIST_FILE = com.acsandmann.swipe.plist
 PLIST_TEMPLATE = com.acsandmann.swipe.plist.in
 
-SRC_FILES = src/aerospace.c src/cJSON.c src/haptic.c src/event_tap.c src/main.m
+SRC_FILES = src/aerospace.c src/cJSON.c src/haptic.c src/event_tap.m src/main.m
 
 BINARY = swipe
 BINARY_NAME = AerospaceSwipe
@@ -93,4 +93,4 @@ format:
 	clang-format -i -- **/**.c **/**.h **/**.m
 
 clean:
-	rm -rf $(TARGET) /Users/atticus/Library/LaunchAgents/com.acsandmann.swipe.plist $(APP_BUNDLE)
+	rm -rf $(TARGET) $(APP_BUNDLE)
