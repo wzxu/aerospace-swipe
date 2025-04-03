@@ -3,8 +3,8 @@
 #include "aerospace.h"
 #include "config.h"
 #import "event_tap.h"
-#include <AppKit/AppKit.h>
 #include "haptic.h"
+#include <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
 #include <pthread.h>
 
@@ -55,17 +55,7 @@ static void gestureCallback(touch* contacts, int numContacts)
 	static int consecutiveRightFrames = 0;
 	static int consecutiveLeftFrames = 0;
 
-	int activeCount = 0;
-	float sumX = 0.0f;
-	float sumVelX = 0.0f;
-	for (int i = 0; i < numContacts; ++i) {
-		// TODO: check size vs ACTIVE_TOUCH_THRESHOLD
-		activeCount++;
-		sumX += contacts[i].x;
-		sumVelX += contacts[i].velocity;
-	}
-
-	if (activeCount != config.fingers || (contacts[0].timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
+	if (numContacts != config.fingers || (contacts[0].timestamp - lastSwipeTime) < SWIPE_COOLDOWN) {
 		swiping = false;
 		consecutiveRightFrames = 0;
 		consecutiveLeftFrames = 0;
@@ -73,8 +63,16 @@ static void gestureCallback(touch* contacts, int numContacts)
 		return;
 	}
 
-	const float avgX = sumX / activeCount;
-	const float avgVelX = sumVelX / activeCount;
+	float sumX = 0.0f;
+	float sumVelX = 0.0f;
+
+	for (int i = 0; i < numContacts; ++i) {
+		sumX += contacts[i].x;
+		sumVelX += contacts[i].velocity;
+	}
+
+	const float avgX = sumX / numContacts;
+	const float avgVelX = sumVelX / numContacts;
 
 	if (!swiping) {
 		swiping = true;
@@ -122,41 +120,49 @@ static void gestureCallback(touch* contacts, int numContacts)
 }
 
 static CGEventRef key_handler(CGEventTapProxy proxy,
-                              CGEventType type,
-                              CGEventRef event,
-                              void *reference)
+	CGEventType type,
+	CGEventRef event,
+	void* reference)
 {
-    switch (type) {
-        case kCGEventTapDisabledByTimeout:
-            NSLog(@"Timeout.\n");
-        case kCGEventTapDisabledByUserInput:
-            NSLog(@"Re‐enabling event tap.\n");
-            CGEventTapEnable(((struct event_tap *)reference)->handle, true);
-            break;
-        case NSEventTypeGesture:
-        case NSEventTypeSwipe: {
-            NSEvent *nsEvent = [NSEvent eventWithCGEvent:event];
-            NSSet<NSTouch *> *touches = nsEvent.allTouches;
-            NSUInteger count = touches.count;
+	if (!AXIsProcessTrusted()) {
+		NSLog(@"Accessibility permission lost. Disabling event tap to allow system events.");
+		event_tap_end((struct event_tap*)reference);
+		return event;
+	}
 
-            if (count == 0) return event;
+	switch (type) {
+	case kCGEventTapDisabledByTimeout:
+		NSLog(@"Timeout.\n");
+	case kCGEventTapDisabledByUserInput:
+		NSLog(@"Re‐enabling event tap.\n");
+		CGEventTapEnable(((struct event_tap*)reference)->handle, true);
+		break;
+	case NSEventTypeGesture: {
+		NSEvent* nsEvent = [NSEvent eventWithCGEvent:event];
+		NSSet<NSTouch*>* touches = nsEvent.allTouches;
+		NSUInteger count = touches.count;
 
-            touch *nativeTouches = malloc(sizeof(touch) * count);
-            if (nativeTouches == NULL) return event;
+		if (count == 0)
+			return event;
 
-            NSUInteger i = 0;
-            for (NSTouch *aTouch in touches) nativeTouches[i++] = [TouchConverter convert_nstouch:aTouch];
+		touch* nativeTouches = malloc(sizeof(touch) * count);
+		if (nativeTouches == NULL)
+			return event;
 
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            	gestureCallback(nativeTouches, count);
-            	free(nativeTouches);
-            });
+		NSUInteger i = 0;
+		for (NSTouch* aTouch in touches)
+			nativeTouches[i++] = [TouchConverter convert_nstouch:aTouch];
 
-            return event;
-        }
-    }
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			gestureCallback(nativeTouches, count);
+			free(nativeTouches);
+		});
 
-    return event;
+		return event;
+	}
+	}
+
+	return event;
 }
 
 static void acquire_lockfile(void)
@@ -240,7 +246,6 @@ int main(int argc, const char* argv[])
 
 		event_tap_begin(&g_event_tap, key_handler);
 
-		// Continue with normal application startup.
 		return NSApplicationMain(argc, argv);
 	}
 }

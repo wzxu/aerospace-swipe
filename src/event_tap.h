@@ -1,7 +1,7 @@
 #pragma once
 #include <Carbon/Carbon.h>
-#import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <Foundation/Foundation.h>
 #include <objc/message.h>
 #include <stdbool.h>
 #include <stdint.h>

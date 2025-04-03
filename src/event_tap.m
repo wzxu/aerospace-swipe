@@ -8,52 +8,53 @@
 
 @implementation TouchConverter
 
-+ (touch)convert_nstouch:(id)nsTouch {
-    NSTouch *touchObj = (NSTouch *)nsTouch;
-    touch nt;
++ (touch)convert_nstouch:(id)nsTouch
+{
+	NSTouch* touchObj = (NSTouch*)nsTouch;
+	touch nt;
 
-    CGPoint pos = [touchObj normalizedPosition];
-    nt.x = pos.x;
-    nt.y = pos.y;
+	CGPoint pos = [touchObj normalizedPosition];
+	nt.x = pos.x;
+	nt.y = pos.y;
 
-    nt.phase = (int)[touchObj phase];
-    nt.timestamp = [[touchObj valueForKey:@"timestamp"] doubleValue];
+	nt.phase = (int)[touchObj phase];
+	nt.timestamp = [[touchObj valueForKey:@"timestamp"] doubleValue];
 
-    id touchIdentity = [touchObj identity];
+	id touchIdentity = [touchObj identity];
 
-    if (!touchStates) {
-        touchStates = CFDictionaryCreateMutable(NULL, 0,
-                                                  &kCFTypeDictionaryKeyCallBacks,
-                                                  NULL);
-    }
+	if (!touchStates) {
+		touchStates = CFDictionaryCreateMutable(NULL, 0,
+			&kCFTypeDictionaryKeyCallBacks,
+			NULL);
+	}
 
-    double velocity_x = 0.0;
-    touch_state *state = (touch_state *)CFDictionaryGetValue(touchStates, (__bridge const void *)(touchIdentity));
-    if (state) {
-        double dt = nt.timestamp - state->timestamp;
-        if (dt > 0)
-            velocity_x = (nt.x - state->x) / dt;
-        state->x = nt.x;
-        state->y = nt.y;
-        state->timestamp = nt.timestamp;
-    } else {
-        state = malloc(sizeof(touch_state));
-        if (state) {
-            state->x = nt.x;
-            state->y = nt.y;
-            state->timestamp = nt.timestamp;
-            CFDictionarySetValue(touchStates, (__bridge const void *)(touchIdentity), state);
-        }
-    }
-    nt.velocity = velocity_x;
+	double velocity_x = 0.0;
+	touch_state* state = (touch_state*)CFDictionaryGetValue(touchStates, (__bridge const void*)(touchIdentity));
+	if (state) {
+		double dt = nt.timestamp - state->timestamp;
+		if (dt > 0)
+			velocity_x = (nt.x - state->x) / dt;
+		state->x = nt.x;
+		state->y = nt.y;
+		state->timestamp = nt.timestamp;
+	} else {
+		state = malloc(sizeof(touch_state));
+		if (state) {
+			state->x = nt.x;
+			state->y = nt.y;
+			state->timestamp = nt.timestamp;
+			CFDictionarySetValue(touchStates, (__bridge const void*)(touchIdentity), state);
+		}
+	}
+	nt.velocity = velocity_x;
 
-    if (nt.phase == 8) {
-        CFDictionaryRemoveValue(touchStates, (__bridge const void *)(touchIdentity));
-        if (state)
-            free(state);
-    }
+	if (nt.phase == 8) {
+		CFDictionaryRemoveValue(touchStates, (__bridge const void*)(touchIdentity));
+		if (state)
+			free(state);
+	}
 
-    return nt;
+	return nt;
 }
 
 @end
